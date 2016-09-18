@@ -1,51 +1,51 @@
 ---
 
 - name: get count of existing partition 
-  shell: fdisk -l {{ disk }} | grep {{ disk }}[0-9] | wc -l
+  shell: fdisk -l "{{ disk }}" | grep "{{ disk }}[0-9]" | wc -l
   register: partition_count
 
 - set_fact: new_partition_number={{ partition_count.stdout| int + 1 }}
 
 - name: Checkint total cylinder  
-  shell: fdisk -l {{ disk }} | grep -oP '(?<=track,\s)\d.*(?=cylinders)'
+  shell: fdisk -l "{{ disk }}" | grep -oP '(?<=track,\s)\d.*(?=cylinders)'
   register: cylinder
 
 - debug: msg={{ cylinder.stdout }}
 
 - name: Checking free blocks available or not 
-  shell: fdisk -l {{ disk }} | grep {{ disk }}{{ new_partition_number }} | awk '{ print $3 }'
+  shell: fdisk -l "{{ disk }}" | grep "{{ disk }}{{ new_partition_number }}" | awk '{ print $3 }'
   register: existing_cylinder
 
 - debug: msg={{ existing_cylinder.stdout }}
 
 - name: Create New Partition using available free space
-  shell: echo -e "n\np\n{{ new_partition_number }}\n\n\nt\n{{new_partition_number}}\n8e\nw" | fdisk {{ disk }} 
+  shell: echo -e "n\np\n{{ new_partition_number }}\n\n\nt\n{{new_partition_number}}\n8e\nw" | fdisk "{{ disk }} "
   no_log: true
   ignore_errors: true
   when: "{{ cylinder.stdout }} != {{ existing_cylinder.stdout }}"
   register: fdisk_stat
 
 - name: Checking disk is already added in vg or not 
-  shell: pvs {{ disk }}{{ new_partition_number }}
+  shell: pvs "{{ disk }}{{ new_partition_number }}"
   ignore_errors: true
   register: pv_disks
   no_log: true
 
 - name: Re Read Partition table
-  shell: partx -v -a {{ disk }}
+  shell: partx -v -a "{{ disk }}"
   when: "'{{ disk }}{{ new_partition_number }}' not in  pv_disks.stdout"
   register: reread
 
 - name: Extendeding vg
-  shell: vgextend {{ vg_name }} {{ disk }}{{ new_partition_number }} 
+  shell: vgextend "{{ vg_name }}" "{{ disk }}{{ new_partition_number }}"
   when: "'{{ disk }}{{ new_partition_number }}' not in  pv_disks.stdout"
   register: vgext_stat
 
 - name: Extended lv 
-  shell: lvextend -l +100%FREE {{ vol_path }}
+  shell: lvextend -l +100%FREE "{{ vol_path }}"
   when: not vgext_stat|skipped 
   register: lv_ext
 
 - name: resize2fs  
-  shell: resize2fs {{ vol_path }}
+  shell: resize2fs "{{ vol_path }}"
   when: not vgext_stat|skipped 
